@@ -1,0 +1,16 @@
+@charset "ISO-8859-1";
+body {
+    font-family: Arial, sans-serif;
+    text-align: center;
+    background-color: #C2CEEF;
+;
+}
+
+h1 {
+    color: #48577E;
+}
+
+a {
+    color: #007bff;
+    text-decoration: none;
+}
