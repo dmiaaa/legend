@@ -5,33 +5,48 @@ include('vendor/inc/checklogin.php');
 check_login();
 $aid = $_SESSION['u_id'];
 
-// Calculate the date 6 months ago from the current date
-$startDate = date('Y-m-d', strtotime('-6 months'));
+if (isset($_POST['month'])) {
+    $selectedMonth = $_POST['month'];
+    $ret = "SELECT * FROM tms_user WHERE (u_car_book_status = 'Approved' OR u_car_book_status = 'Pending') AND DATE_FORMAT(u_car_bookdate, '%M %Y') = ?";
+    $stmt = $mysqli->prepare($ret);
+    $stmt->bind_param("s", $selectedMonth);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    $cnt = 1;
 
-// Check if the user has submitted the form with a selected month
-if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST["search_month"])) {
-    $selectedMonth = $_POST["selected_month"];
-    // Query to fetch bookings for the selected month
-    $ret = "SELECT * FROM tms_user WHERE u_car_book_status IN ('Approved', 'Pending') AND MONTH(u_car_bookdate) = ? AND u_car_bookdate >= ?";
-    $stmt = $mysqli->prepare($ret);
-    $stmt->bind_param("ss", $selectedMonth, $startDate);
-    $stmt->execute();
-    $res = $stmt->get_result();
-} else {
-    // Default query to fetch all bookings for the past 6 months
-    $ret = "SELECT * FROM tms_user WHERE u_car_book_status IN ('Approved', 'Pending') AND u_car_bookdate >= ?";
-    $stmt = $mysqli->prepare($ret);
-    $stmt->bind_param("s", $startDate);
-    $stmt->execute();
-    $res = $stmt->get_result();
+    while ($row = $res->fetch_object()) {
+        echo "<tr>";
+        echo "<td>{$row->u_fname} {$row->u_lname}</td>";
+        echo "<td>{$row->u_phone}</td>";
+        echo "<td>{$row->u_car_type}</td>";
+        echo "<td>{$row->u_pic}</td>";
+        echo "<td>{$row->u_car_regno}</td>";
+        echo "<td>{$row->u_car_bookdate}</td>";
+        echo "<td>{$row->u_startbooktime}</td>";
+        echo "<td>{$row->u_endbooktime}</td>";
+        echo "<td>";
+        if ($row->u_car_book_status == "Pending") {
+            echo '<span class="badge badge-warning">' . $row->u_car_book_status . '</span>';
+        } else {
+            echo '<span class="badge badge-success">' . $row->u_car_book_status . '</span>';
+        }
+        echo "</td>";
+        echo "</tr>";
+    }
+
+    // Terminate the script after loading history via AJAX
+    exit();
 }
 ?>
 
 <!DOCTYPE html>
 <html lang="en">
+<title>CleanConnect Pro - History</title>
 <?php include("vendor/inc/head.php");?>
 
 <body id="page-top">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" integrity="sha512-...your-integrity-hash-here..." crossorigin="anonymous" />
+
     <!--Start Navigation Bar-->
     <?php include("vendor/inc/nav.php");?>
     <!--Navigation Bar-->
@@ -45,44 +60,34 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST["search_month"])) {
 
             <div class="container-fluid">
 
-                <!-- Breadcrumbs-->
+                <!-- Breadcrumbs and Month Selection -->
                 <ol class="breadcrumb">
                     <li class="breadcrumb-item">
                         <a href="user-dashboard.php">Dashboard</a>
                     </li>
-                    <li class="breadcrumb-item active">History</li>
+                    <li class="breadcrumb-item  active ">History</li>
                 </ol>
+                <div class="form-group">
+                    <label for="monthSelect">Select Month:</label>
+                    <select class="form-control" id="monthSelect" name="monthSelect" onchange="loadHistory()">
+                        <option value="">-- Select Month --</option>
+                        <?php
+                        // Generate options for the last 12 months
+                        for ($i = 0; $i < 12; $i++) {
+                            $month = date('F Y', strtotime("-$i month"));
+                            echo "<option value=\"$month\">$month</option>";
+                        }
+                        ?>
+                    </select>
+                </div>
 
-                <!-- View Booking History -->
+                <!-- My Bookings Table -->
                 <div class="card mb-3">
                     <div class="card-header">
-                        <i class="fas fa-table"></i>
-                        Booking History
+                        <i class="fas fa-history"></i>
+                        View My History
                     </div>
                     <div class="card-body">
-                        <!-- Form to select the month -->
-                        <form method="post" action="<?php echo $_SERVER['PHP_SELF']; ?>">
-                            <div class="form-group">
-                                <label for="selected_month">Select a Month:</label>
-                                <select name="selected_month" id="selected_month" class="form-control">
-                                    <option value="01">January</option>
-                                    <option value="02">February</option>
-                                    <option value="03">March</option>
-                                    <option value="04">April</option>
-                                    <option value="05">May</option>
-                                    <option value="06">June</option>
-                                    <option value="07">July</option>
-                                    <option value="08">August</option>
-                                    <option value="09">September</option>
-                                    <option value="10">October</option>
-                                    <option value="11">November</option>
-                                    <option value="12">December</option>
-                                </select>
-                            </div>
-                            <button type="submit" name="search_month" class="btn btn-primary">Search</button>
-                            <p></p>
-                        </form>
-
                         <div class="table-responsive">
                             <table class="table table-bordered table-striped table-hover" id="dataTable" width="100%" cellspacing="0">
                                 <thead>
@@ -90,46 +95,31 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST["search_month"])) {
                                         <th>Name</th>
                                         <th>Phone</th>
                                         <th>Location</th>
-                                        <th>No Phone</th>
+                                        <th>PIC Name</th>
+                                        <th>PIC No Phone</th>
                                         <th>Booking date</th>
                                         <th>Start Booking Time</th>
                                         <th>End Booking time</th>
                                         <th>Status</th>
                                     </tr>
                                 </thead>
-
-                                <tbody>
-                                    <?php
-                                    $cnt = 1;
-                                    while ($row = $res->fetch_object()) {
-                                    ?>
-                                        <tr>
-                                            <td><?php echo $row->u_fname; ?> <?php echo $row->u_lname; ?></td>
-                                            <td><?php echo $row->u_phone; ?></td>
-                                            <td><?php echo $row->u_car_type; ?></td>
-                                            <td><?php echo $row->u_car_regno; ?></td>
-                                            <td><?php echo $row->u_car_bookdate; ?></td>
-                                            <td><?php echo $row->u_startbooktime; ?></td>
-                                            <td><?php echo $row->u_endbooktime; ?></td>
-                                            <td><?php if ($row->u_car_book_status == "Pending") {
-                                                echo '<span class="badge badge-warning">' . $row->u_car_book_status . '</span>';
-                                            } else {
-                                                echo '<span class="badge badge-success">' . $row->u_car_book_status . '</span>';
-                                            } ?></td>
-                                        </tr>
-                                    <?php  } ?>
+                                <tbody id="historyTableBody">
+                                    <!-- Table content will be loaded dynamically -->
                                 </tbody>
                             </table>
                         </div>
                     </div>
                 </div>
+
             </div>
             <!-- /.container-fluid -->
 
             <!-- Sticky Footer -->
-            <?php include("vendor/inc/footer.php"); ?>
+            <?php include("vendor/inc/footer.php");?>
+
         </div>
         <!-- /.content-wrapper -->
+
     </div>
     <!-- /#wrapper -->
 
@@ -164,16 +154,25 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST["search_month"])) {
     <!-- Core plugin JavaScript-->
     <script src="vendor/jquery-easing/jquery.easing.min.js"></script>
 
-    <!-- Page level plugin JavaScript-->
-    <script src="vendor/chart.js/Chart.min.js"></script>
-    <script src="vendor/datatables/jquery.dataTables.js"></script>
-    <script src="vendor/datatables/dataTables.bootstrap4.js"></script>
-
     <!-- Custom scripts for all pages-->
     <script src="vendor/js/sb-admin.min.js"></script>
 
-    <!-- Demo scripts for this page-->
-    <script src="vendor/js/demo/datatables-demo.js"></script>
-    <script src="vendor/js/demo/chart-area-demo.js"></script>
+    <!-- Load History Script -->
+    <script>
+        function loadHistory() {
+            var selectedMonth = document.getElementById("monthSelect").value;
+            // Perform AJAX request to load bookings for the selected month
+            $.ajax({
+                url: "usr-history.php", // Same file handles the request
+                type: "POST",
+                data: { month: selectedMonth },
+                success: function(response) {
+                    // Update the table with the new data
+                    $("#historyTableBody").html(response);
+                }
+            });
+        }
+    </script>
 </body>
+
 </html>
